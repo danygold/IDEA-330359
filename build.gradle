@@ -1,0 +1,141 @@
+import org.jetbrains.changelog.Changelog
+
+
+plugins {
+    id 'java'
+    id 'application'
+    id 'checkstyle'
+    id 'org.openjfx.javafxplugin' version '0.0.14'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+    id 'org.panteleyev.jpackageplugin' version '1.5.2'
+    id 'com.github.jk1.dependency-license-report' version '2.5'
+    id 'org.jetbrains.changelog' version '2.1.2'
+    id 'net.researchgate.release' version '3.0.2'
+}
+
+ext {
+
+    java9RuntimeArgs = [
+            "--add-exports",
+            "javafx.base/com.sun.javafx.collections=ALL-UNNAMED",
+            "--add-exports",
+            "javafx.base/com.sun.javafx.event=ALL-UNNAMED",
+            "--add-exports",
+            "javafx.graphics/com.sun.javafx.scene=ALL-UNNAMED",
+            "--add-exports",
+            "javafx.graphics/com.sun.javafx.application=ALL-UNNAMED",
+            "--add-opens",
+            "javafx.base/com.sun.javafx.collections=ALL-UNNAMED",
+            "--add-opens",
+            "javafx.controls/javafx.scene.control=ALL-UNNAMED",
+            "--add-opens",
+            "javafx.graphics/javafx.scene=ALL-UNNAMED"
+    ]
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+compileJava.options.encoding = "UTF-8"
+compileTestJava.options.encoding = "UTF-8"
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.apache.logging.log4j:log4j-core:2.20.0'
+    implementation 'org.apache.logging.log4j:log4j-slf4j2-impl:2.20.0' // tika-core slf4j2 logger
+    implementation 'org.apache.commons:commons-lang3:3.13.0'
+    implementation 'org.apache.commons:commons-text:1.10.0'
+    implementation 'org.apache.commons:commons-csv:1.10.0'
+    implementation 'commons-io:commons-io:2.13.0'
+    implementation 'commons-codec:commons-codec:1.16.0'
+    implementation 'org.json:json:20230618'
+    implementation 'com.squareup.moshi:moshi:1.15.0'
+    implementation 'com.squareup.moshi:moshi-adapters:1.15.0'
+    implementation 'io.github.danygold:fx-moshi:1.0.0'
+    implementation 'org.ahocorasick:ahocorasick:0.6.3'
+    implementation 'org.controlsfx:controlsfx:11.1.2'
+    implementation 'com.squareup.okhttp3:okhttp:4.11.0'
+    implementation 'org.xerial:sqlite-jdbc:3.42.0.0'
+    implementation 'com.github.albfernandez:juniversalchardet:2.4.0'
+    implementation 'org.apache.tika:tika-core:2.8.0'
+    implementation 'net.java.dev.jna:jna-platform:5.13.0'
+
+    implementation 'org.jetbrains:annotations:24.0.1'
+    implementation 'com.google.errorprone:error_prone_annotations:2.21.1'
+
+    checkstyle 'com.puppycrawl.tools:checkstyle:10.12.2'
+
+    testImplementation 'org.testfx:testfx-junit5:4.0.16-alpha'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
+}
+
+application {
+    mainClass = 'org.example.Main'
+    applicationName = 'IDEA-330359'
+    applicationDefaultJvmArgs = java9RuntimeArgs
+}
+
+run {
+    doFirst {
+        jvmArgs += java9RuntimeArgs
+    }
+}
+
+javafx {
+    version = '17'
+    modules = ['javafx.base', 'javafx.controls', 'javafx.fxml', 'javafx.graphics']
+}
+
+checkstyle {
+    // The build will not fail if there are violations found.
+    ignoreFailures = true
+}
+
+javadoc {
+    options {
+        // Include unofficial javadoc tags (https://docs.oracle.com/javase/8/docs/technotes/tools/windows/javadoc.html#CHDJGIJB)
+        //noinspection GrUnresolvedAccess
+        tags('apiNote:a:API Note:', 'implSpec:a:Implementation Requirements:', 'implNote:a:Implementation Note:')
+        encoding = "UTF-8"
+    }
+}
+
+processResources {
+    from(generateLicenseReport) {
+        include "*.json"
+    }
+}
+
+tasks.register('buildProductLicense', JavaExec) {
+    group = "Distribution"
+    description = "Generate product licenses for this application"
+
+    classpath = project.sourceSets.test.runtimeClasspath
+    mainClass.set('com.devagent.license.LicenseGeneration')
+}
+
+tasks.register('finalizeBuild') {
+    group = "Release"
+    description = "Build process for application release"
+
+    doLast {
+        new File("$releaseDirectory/LATEST").text = project.version
+
+        changelog.keepUnreleasedSection = false
+        patchChangelog.run()
+
+        // noinspection GroovyAssignabilityCheck
+        new File("$releaseDirectory/CHANGELOG.html").setText(
+                "<style>" + new File("$rootDir/src/main/assets/css/changelog.css").text + "</style>" + changelog.render(Changelog.OutputType.HTML),
+                "UTF-8")
+
+        changelog.keepUnreleasedSection = true
+        patchChangelog.run()
+    }
+}
